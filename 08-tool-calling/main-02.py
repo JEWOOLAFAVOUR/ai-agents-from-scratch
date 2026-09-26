@@ -55,7 +55,7 @@ calculator_tool = {
 
 response = client.models.generate_content(
     model="gemini-3.6-flash",
-    contents="What is 2500 + 7500?",
+    contents="What is 2400 + 7500?",
     config={
         "tools": [
             {
@@ -82,3 +82,53 @@ for part in response.candidates[0].content.parts:
         )
 
     print("Tool Result: ", result)
+
+def validate_calculator_args(args):
+
+    if "a" not in args:
+        raise ValueError("Missing argument: a")
+
+    if "b" not in args:
+        raise ValueError("Missing argument: b")
+
+    if "operation" not in args:
+        raise ValueError("Missing argument: operation")
+
+    if not isinstance(args["a"], (int, float)):
+        raise ValueError("a must be a number")
+
+    if not isinstance(args["b"], (int, float)):
+        raise ValueError("b must be a number")
+
+    allowed_operations = {
+        "add",
+        "subtract",
+        "multiply",
+        "divide"
+    }
+
+    if args["operation"] not in allowed_operations:
+        raise ValueError("Invalid operation")
+
+def execute_tool(function_call): 
+
+    tool_name = function_call.name
+    args = function_call.args
+
+    if tool_name != "calculator":
+        raise ValueError(
+            f"Unknown tool: ", tool_name
+        )
+    
+    validate_calculator_args(args)
+
+    return calculator(
+        args["a"],
+        args["b"],
+        args["operation"]
+    )
+
+result = execute_tool(function_call)
+
+print("TOOL RESULT:")
+print(result)

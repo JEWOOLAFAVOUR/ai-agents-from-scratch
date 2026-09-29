@@ -1,5 +1,4 @@
 from google import genai
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -72,17 +71,6 @@ for part in response.candidates[0].content.parts:
 
     function_call = part.function_call
 
-    if function_call.name == "calculator":
-        args = function_call.args
-
-        result = calculator(
-            args["a"],
-            args["b"],
-            args["operation"]
-        )
-
-    print("Tool Result: ", result)
-
 def validate_calculator_args(args):
 
     if "a" not in args:
@@ -109,6 +97,7 @@ def validate_calculator_args(args):
 
     if args["operation"] not in allowed_operations:
         raise ValueError("Invalid operation")
+    
 
 def execute_tool(function_call): 
 
@@ -117,7 +106,7 @@ def execute_tool(function_call):
 
     if tool_name != "calculator":
         raise ValueError(
-            f"Unknown tool: ", tool_name
+            f"Unknown tool: {tool_name}"
         )
     
     validate_calculator_args(args)
@@ -130,5 +119,4 @@ def execute_tool(function_call):
 
 result = execute_tool(function_call)
 
-print("TOOL RESULT:")
-print(result)
+print("TOOL RESULT: ", result)

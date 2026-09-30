@@ -2,8 +2,13 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import json
+import time
+import uuid
 
 load_dotenv()
+
+MAX_ITERATION = 10
+MAX_RUNTIME_SECONDS = 30
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -140,82 +145,160 @@ def execute_tool(tool_call):
     )
 
 
-# Agent Loop
+# trace function
+
+def log_event(event, **data):
+    print({
+        "event": event,
+        "timestamp": time.time(),
+        **data,
+    })
+
+
+
+# Agent Loop & memory
 
 agent_messages = []
 
 
 def run_agent(user_message):
 
+    run_id = str(uuid.uuid4())
+
+    log_event(
+        "RUN_START",
+        run_id=run_id
+    )
+
+    start_time = time.monotonic()
+
     agent_messages.append({
         "role": "user",
         "content": user_message
     })
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=agent_messages,
-        tools=[calculator_tool]
-    )
+    for iteration in range(MAX_ITERATION):
 
-    assistant_message = response.choices[0].message
+        log_event(
+            "ITERATION_START",
+            run_id=run_id,
+            iteration=iteration
+        )
 
-    # Model answered normally without using a tool
-    if not assistant_message.tool_calls:
+        # Check total runtime
+        elapsed = time.monotonic() - start_time
+
+        if elapsed > MAX_RUNTIME_SECONDS:
+            log_event(
+                "RUN_STOP",
+                run_id=run_id,
+                reason="max_runtime"
+            )
+
+            raise TimeoutError(
+                "Agent exceeded maximum runtime"
+            )
+
+        # CALL MODEL
+
+        log_event(
+            "MODEL_CALL",
+            run_id=run_id,
+            iteration=iteration
+        )
+
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=agent_messages,
+            tools=[calculator_tool]
+        )
+
+        assistant_message = response.choices[0].message
+
+        # MODEL ANSWERED DIRECTLY FOR TASKS THAT DOESN"T REQUIRE TOOL
+
+        if not assistant_message.tool_calls:
+
+            agent_messages.append({
+                "role": "assistant",
+                "content": assistant_message.content
+            })
+
+            log_event(
+                "RUN_STOP",
+                run_id=run_id,
+                reason="final_answer"
+            )
+
+            return assistant_message.content
+
+        # MODEL REQUESTED TOOL
 
         agent_messages.append({
             "role": "assistant",
-            "content": assistant_message.content
-        })
-
-        return assistant_message.content
-
-    # Model requested a tool
-    agent_messages.append({
-        "role": "assistant",
-        "content": assistant_message.content,
-        "tool_calls": [
-            {
-                "id": tool_call.id,
-                "type": "function",
-                "function": {
-                    "name": tool_call.function.name,
-                    "arguments": tool_call.function.arguments
+            "content": assistant_message.content,
+            "tool_calls": [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments
+                    }
                 }
-            }
-            for tool_call in assistant_message.tool_calls
-        ]
-    })
-
-    # Execute every tool the model requested
-    for tool_call in assistant_message.tool_calls:
-
-        result = execute_tool(tool_call)
-
-        agent_messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call.id,
-            "content": json.dumps({
-                "result": result
-            })
+                for tool_call in assistant_message.tool_calls
+            ]
         })
 
-    # Send the tool result back to the model
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=agent_messages,
-        tools=[calculator_tool]
+        # EXECUTE TOOLS
+
+        for tool_call in assistant_message.tool_calls:
+
+            log_event(
+                "TOOL_CALL",
+                run_id=run_id,
+                iteration=iteration,
+                tool=tool_call.function.name
+            )
+
+            tool_start = time.monotonic()
+
+            log_event(
+                "TOOL_START",
+                run_id=run_id,
+                tool=tool_call.function.name
+            )
+
+            result = execute_tool(tool_call)
+
+            tool_duration = time.monotonic() - tool_start
+
+            log_event(
+                "TOOL_SUCCESS",
+                run_id=run_id,
+                tool=tool_call.function.name,
+                duration_ms=round(tool_duration * 1000, 2)
+            )
+
+            agent_messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": json.dumps({
+                    "result": result
+                })
+            })
+
+    # LOOP FINISHED
+
+    log_event(
+        "RUN_STOP",
+        run_id=run_id,
+        reason="max_iterations"
     )
 
-    final_message = response.choices[0].message
-
-    agent_messages.append({
-        "role": "assistant",
-        "content": final_message.content
-    })
-
-    return final_message.content
-
+    raise RuntimeError(
+        "Agent exceeded maximum iterations"
+    )
 
 
 # Running a Test
@@ -230,6 +313,12 @@ print("Agent:", answer)
 
 answer = run_agent(
     "Now subtract 25000 from that."
+)
+
+print("Agent:", answer)
+
+answer = run_agent(
+    "What is the capital of Nigeria"
 )
 
 print("Agent:", answer)

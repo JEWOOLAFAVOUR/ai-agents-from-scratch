@@ -29,6 +29,12 @@ def ask_model(prompt: str, max_attempts: int = 4) -> str:
                 temperature=0
             )
 
+            usage = response.usage
+
+            print("Input tokens: ",  usage.prompt_tokens)
+            print("Output tokens: ", usage.completion_tokens)
+            print("Total tokens: ", usage.total_tokens)
+
             return response.choices[0].message.content or ""
 
         except RETRYABLE_ERROR:
@@ -48,3 +54,4 @@ def ask_model(prompt: str, max_attempts: int = 4) -> str:
 answer = ask_model("Explain the difference between ai agents and llm")
 
 print(answer)
+

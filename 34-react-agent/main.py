@@ -159,6 +159,8 @@ def run_agent(question: str, max_steps: int = 6) -> str:
             name = tool_call.function.name
 
             print("Requested tool:", name)
+            print("argument", tool_call.function.arguments)
+            print("argument json", json.loads(tool_call.function.arguments))
 
             try:
                 arguments = json.loads(
@@ -171,6 +173,7 @@ def run_agent(question: str, max_steps: int = 6) -> str:
                     result = {"error": "Unknown tool."}
                 else:
                     result = function(**arguments)
+                    print("------------------", result)
 
             except (json.JSONDecodeError, TypeError, KeyError) as error:
                 result = {"error": f"Invalid tool request: {error}"}
@@ -196,6 +199,3 @@ if __name__ == "__main__":
 
     print("\n--- FINAL ANSWER ---")
     print(answer)
-
-    answer2 = run_agent("get me th total spending in january return as json", 10)
-    print(answer2)

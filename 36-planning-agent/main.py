@@ -61,7 +61,6 @@ def calculate_totals(state: dict) -> dict:
     }
 
 
-
 def write_report(state: dict) -> dict:
     facts = {
         "category_totals": state["category_totals"],
